@@ -48,24 +48,26 @@ The profile carries three fields. The operator currently propagates two of them 
 
 ### Group Name Translation
 
-18. **[PLANNED: TRACING-6785]** OpenShift group names, Go `CurveID` names, and collector `curve_preferences` names are three distinct vocabularies. The operator translates explicitly; no string manipulation or `CurveID.String()` shortcut produces the collector spelling.
+18. **[PLANNED: TRACING-6785]** OpenShift group names, Go `CurveID` constants, and collector `curve_preferences` names are three distinct vocabularies. The operator translates explicitly; no string manipulation or `CurveID.String()` shortcut produces the collector spelling.
 
-| OpenShift `groups` | Go `crypto/tls` | Collector `curve_preferences` |
-|---|---|---|
-| `X25519` | `X25519` | `X25519` |
-| `secp256r1` | `CurveP256` | `P256` |
-| `secp384r1` | `CurveP384` | `P384` |
-| `secp521r1` | `CurveP521` | `P521` |
-| `X25519MLKEM768` | `X25519MLKEM768` | `X25519MLKEM768` |
-| `SecP256r1MLKEM768` | `SecP256r1MLKEM768` | `SecP256r1MLKEM768` (see rule 20) |
-| `SecP384r1MLKEM1024` | `SecP384r1MLKEM1024` | `SecP384r1MLKEM1024` (see rule 20) |
+| OpenShift `groups` | Go `crypto/tls` constant | Numeric `CurveID` | Collector `curve_preferences` |
+|---|---|---|---|
+| `X25519` | `X25519` | `29` | `X25519` |
+| `secp256r1` | `CurveP256` | `23` | `P256` |
+| `secp384r1` | `CurveP384` | `24` | `P384` |
+| `secp521r1` | `CurveP521` | `25` | `P521` |
+| `X25519MLKEM768` | `X25519MLKEM768` | `4588` | `X25519MLKEM768` |
+| `SecP256r1MLKEM768` | `SecP256r1MLKEM768` | `4587` | `SecP256r1MLKEM768` (see rule 20) |
+| `SecP384r1MLKEM1024` | `SecP384r1MLKEM1024` | `4589` | `SecP384r1MLKEM1024` (see rule 20) |
 
 19. **[PLANNED: TRACING-6785]** The operator passes every group in the profile through to the operand. It does not filter, substitute, or drop groups the operand may not accept.
 20. **[PLANNED: TRACING-6785]** `SecP256r1MLKEM768` and `SecP384r1MLKEM1024` require a corresponding upstream collector change before a collector will accept them. Until that lands, a `Custom` profile naming either group causes collector startup to fail with `invalid curve type`. The default `Old`, `Intermediate`, and `Modern` profiles do not contain these groups, so only custom profiles are affected.
 
-### Target Allocator Configuration Vocabulary
+### Operator and Target Allocator Configuration Vocabulary
 
-21. **[PLANNED: TRACING-6785]** The Target Allocator uses Go / `component-base` names for all three fields (`VersionTLS12`, `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`, `CurveP256`), matching the operator's own CLI flags. It does not use the collector's vocabulary; it is not a collector and cannot reuse `configtls`.
+21. **[PLANNED: TRACING-6785]** The Target Allocator uses the Go / `component-base` vocabulary, matching the operator's own CLI flags: Go constant names for `min_version` (`VersionTLS12`) and `cipher_suites` (`TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`), and numeric `CurveID` values for `curve_preferences` (`23` for `CurveP256`). It does not use the collector's vocabulary; it is not a collector and cannot reuse `configtls`.
+22. **[PLANNED: TRACING-6785]** Curves are configured as numbers, not names, on both Go-vocabulary surfaces — the operator's `--tls-curve-preferences` flag and the Target Allocator's `https.curve_preferences` field. `tls.CurveID` is a `uint16` (the IANA supported-group ID), and `component-base` offers only `TLSCurvePreferences([]int32)`; there is no name parser equivalent to `TLSCipherSuites`. `CurveID.String()` is a display helper, not an input format: an ID the running Go version does not know renders as `CurveID(<n>)`, which is how `TLSCurvePreferences` rejects it.
+23. **[PLANNED: TRACING-6785]** Numeric IDs make the Go-vocabulary surfaces forward compatible. A group added by a later Go release is expressible at once, with no operator change, which is not true of the collector `curve_preferences` names in rule 18.
 
 ## Configuration Surface
 
@@ -77,7 +79,7 @@ The profile carries three fields. The operator currently propagates two of them 
 | `--tls-configure-operands` | `TLS_CONFIGURE_OPERANDS` | bool | false | Inject TLS settings into generated operand configuration | **GA** |
 | `--tls-min-version` | `TLS_MIN_VERSION` | string | `VersionTLS12` | Minimum TLS version, Go constant names | **GA** |
 | `--tls-cipher-suites` | `TLS_CIPHER_SUITES` | []string | — | Cipher suites, Go constant names | **GA** |
-| `--tls-curve-preferences` | `TLS_CURVE_PREFERENCES` | []string | — | Supported groups, Go `CurveID` names | **[PLANNED: TRACING-6785]** |
+| `--tls-curve-preferences` | `TLS_CURVE_PREFERENCES` | []int32 | — | Supported groups, numeric Go `CurveID` values (for example `23,24,29`) | **[PLANNED: TRACING-6785]** |
 
 ### Target Allocator configuration
 
@@ -87,13 +89,13 @@ Delivered through the generated `targetallocator.yaml` ConfigMap under the `http
 |---|---|---|---|---|---|
 | `https.min_version` | `--https-min-version` | string | `VersionTLS12` | Minimum TLS version | **[PLANNED: TRACING-6785]** |
 | `https.cipher_suites` | `--https-cipher-suites` | []string | — | Cipher suites | **[PLANNED: TRACING-6785]** |
-| `https.curve_preferences` | `--https-curve-preferences` | []string | — | Supported groups | **[PLANNED: TRACING-6785]** |
+| `https.curve_preferences` | `--https-curve-preferences` | []int32 | — | Supported groups, numeric `CurveID` values | **[PLANNED: TRACING-6785]** |
 
 ## Constraints
 
 1. Profile adherence depends on the `APIServer` CR and is therefore OpenShift-only. On plain Kubernetes only the manual flags apply.
 2. The operator applies the profile at startup, not per reconcile. Picking up a changed profile depends on the restart in rule 5.
-3. The operator does not validate that an operand supports every value in the profile. Rule 19 makes pass-through the contract, and rule 20 records the one case where that currently breaks.
+3. The operator does not validate that an operand supports every value in the profile. Rule 19 makes pass-through the contract, and rule 20 records the one case where that currently breaks. The Go-vocabulary surfaces do validate: `TLSCurvePreferences` rejects an ID that is out of range, duplicated, or unknown to the running Go version.
 4. Operand injection sets defaults only (rule 11), so a user who hardcodes weaker TLS settings in `spec.config` is not corrected by the operator. The cluster profile constrains what the operator generates, not what a user may override.
 5. The OpAMP Bridge receives no TLS profile. It is marked **Not supported** in `operator.md`, so this is intentional rather than a gap.
 
