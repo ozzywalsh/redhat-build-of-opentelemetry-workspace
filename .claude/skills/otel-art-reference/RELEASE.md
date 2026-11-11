@@ -78,7 +78,14 @@ No changes in the bundle/`CSV` or ART configuration files are required.
 
 ### Major or minor version (a new `rhosdt-<version>` branch)
 Every new major or minor operator version gets a new `rhosdt-<version>` branch and a new ART group; patch and CVE fix releases stay on the branch.
-1. Request new branches in `ocp-build-data` from the ART team
+1. Request new branches in `ocp-build-data` from the ART team by posting in slack channel #forum-ocp-art. Once the new rhosdt-<version> branch exists, the art-side bootstrapping can then be handled by chai-bot. Start a thread in #forum-ocp-art mentioning chai-bot like this:
+
+```
+@chai-bot We need to bootstrap rhosdt-<version?. We already have rhosdt-<version> branch in ocp-build-data and the OTEL team is working on submitting necessary changes there. What all needs to be done (and in what order) to complete the full bootstrap process for rhosdt-<version>?
+```
+
+An example of a previous thread: https://redhat-internal.slack.com/archives/CB95J6R4N/p1794327377470239
+
 1. Update version in `ocp-build-data`  in `group.yml` on the `rhosdt-<version>` branch (only for a new major or minor version)
 1. Create downstream branches - copy ART configuration `bundle`/[`art.yaml`, `image-references`, `opentelemetry-product.package.yaml`] with `Dockerfile.art`, `renovate.json` and `fips-allowlist.yaml`.
 1. Update versions in the ART configuration files: `bundle/opentelemetry-product.package.yaml` and `bundle/art.yaml`
