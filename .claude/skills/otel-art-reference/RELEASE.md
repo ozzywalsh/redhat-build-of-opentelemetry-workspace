@@ -128,15 +128,16 @@ Then copy the following files from the previous `rhosdt-*` branch. These files d
 | `OWNERS` | Downstream repo approvers | Usually unchanged |
 | `renovate.json` | Downstream Renovate preset (security-only updates) | Usually unchanged |
 
-**Downstream-only content** (carry forward, review each release):
+**Downstream-only content** (review each release):
 
 | File(s) | Purpose | Action each release |
 |---------|---------|-------------------|
 | `bundle/openshift/manifests/opentelemetry-operator-alerts_*_prometheusrule.yaml` | Downstream-only deprecation/operational alerts | Review: update or remove alerts for components being deprecated or removed in this version |
-| `.gitignore` additions | Ignore patterns for downstream test artifacts (e.g. Playwright) | Carry forward |
-| `tests/e2e-otel/**` | Downstream-only e2e tests | Carry forward |
-| `tests/e2e-otel-ui/**` | Downstream-only UI e2e tests | Carry forward |
-| `tests/e2e-instrumentation/*/scc.yaml` | OpenShift SCCs for instrumentation tests | Carry forward |
+| `.gitignore` additions | Ignore patterns for downstream test artifacts (e.g. Playwright) | Carry forward from previous branch |
+
+**Test preparation** — use the `/otel-qe-prepare-operator-tests` skill:
+
+Tests are copied from `distributed-tracing-qe` `main`, **not** from the previous `rhosdt-*` branch. The QE repo is the authoritative source and contains tests for new components that the previous branch does not have. The skill copies `tests/e2e-otel/` and `tests/e2e-otel-ui/`, removes hardcoded community collector images so the operator injects its product image, and removes `ingress-ready` nodeAffinity from target allocator tests. Run the skill's verification checks before pushing.
 
 **Cherry-picked upstream fixes** (check each release — they may already be in the new tag):
 
