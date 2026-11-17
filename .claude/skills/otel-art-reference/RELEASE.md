@@ -115,6 +115,8 @@ git checkout -b rhosdt-0.<version> v0.<version>.0
 
 Then copy the following files from the previous `rhosdt-*` branch. These files do not exist upstream.
 
+> **Do NOT copy `tests/` from the previous branch.** Tests come from `distributed-tracing-qe` `main` — see "Test preparation" below. The previous branch has stale tests that miss new components.
+
 **Productization files** (must be present for ART to build):
 
 | File | Purpose | Version-sensitive fields to update |
