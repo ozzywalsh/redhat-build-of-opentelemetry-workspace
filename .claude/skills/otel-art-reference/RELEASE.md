@@ -78,16 +78,82 @@ No changes in the bundle/`CSV` or ART configuration files are required.
 
 ### Major or minor version (a new `rhosdt-<version>` branch)
 Every new major or minor operator version gets a new `rhosdt-<version>` branch and a new ART group; patch and CVE fix releases stay on the branch.
+
 1. Request new branches in `ocp-build-data` from the ART team by posting in slack channel #forum-ocp-art. Once the new rhosdt-<version> branch exists, the art-side bootstrapping can then be handled by chai-bot. Start a thread in #forum-ocp-art mentioning chai-bot like this:
 
-```
-@chai-bot We need to bootstrap rhosdt-<version?. We already have rhosdt-<version> branch in ocp-build-data and the OTEL team is working on submitting necessary changes there. What all needs to be done (and in what order) to complete the full bootstrap process for rhosdt-<version>?
+   ```
+   @chai-bot We need to bootstrap rhosdt-<version>. We already have rhosdt-<version> branch in ocp-build-data and the OTEL team is working on submitting necessary changes there. What all needs to be done (and in what order) to complete the full bootstrap process for rhosdt-<version>?
+   ```
+
+   An example of a previous thread: https://redhat-internal.slack.com/archives/CB95J6R4N/p1794327377470239
+
+2. Update version in `ocp-build-data` in `group.yml` on the `rhosdt-<version>` branch (only for a new major or minor version).
+
+3. Create downstream branches — see detailed instructions per repository below.
+
+4. Update versions in the ART configuration files: `bundle/opentelemetry-product.package.yaml` and `bundle/art.yaml`.
+
+5. Update the CI with the `/otel-qe-prepare-ci` skill: move or copy the pre-merge CI config of the operator and of the collector in `release` to the new branch (copy while the previous version still has CVE or patch releases), carry over the changes of the upstream CI jobs, and move or copy the Konflux integration test scenarios to the new ART group. A patch or CVE fix release needs no change in either place.
+
+6. Configure mintmaker on new branches in `konflux-release-data`.
+
+#### Creating downstream branches
+
+Each downstream source repository (`open-telemetry-opentelemetry-operator` and `redhat-opentelemetry-collector`) gets a `rhosdt-<version>` branch. The two repos follow different workflows because they have different relationships with upstream.
+
+##### Operator (`open-telemetry-opentelemetry-operator`)
+
+The downstream `main` is continuously synced with upstream `main` by a rebase bot. This means `main` usually contains commits *past* the upstream release tag. **Do not branch from downstream `main`** — that would include post-release upstream code belonging to the next version.
+
+Instead, branch from the **upstream release tag** and add the downstream-only files on top:
+
+```bash
+# In the open-telemetry-opentelemetry-operator clone
+git fetch upstream v0.<version>.0 --tags
+git checkout -b rhosdt-0.<version> v0.<version>.0
 ```
 
-An example of a previous thread: https://redhat-internal.slack.com/archives/CB95J6R4N/p1794327377470239
+Then copy the following files from the previous `rhosdt-*` branch. These files do not exist upstream.
 
-1. Update version in `ocp-build-data`  in `group.yml` on the `rhosdt-<version>` branch (only for a new major or minor version)
-1. Create downstream branches - copy ART configuration `bundle`/[`art.yaml`, `image-references`, `opentelemetry-product.package.yaml`] with `Dockerfile.art`, `renovate.json` and `fips-allowlist.yaml`.
-1. Update versions in the ART configuration files: `bundle/opentelemetry-product.package.yaml` and `bundle/art.yaml`
-1. Update the CI with the `/otel-qe-prepare-ci` skill: move or copy the pre-merge CI config of the operator and of the collector in `release` to the new branch (copy while the previous version still has CVE or patch releases), carry over the changes of the upstream CI jobs, and move or copy the Konflux integration test scenarios to the new ART group. A patch or CVE fix release needs no change in either place.
-1. Configure mintmaker on new branches in `konflux-release-data`
+**Productization files** (must be present for ART to build):
+
+| File | Purpose | Version-sensitive fields to update |
+|------|---------|-----------------------------------|
+| `Dockerfile.art` | Operator image build | `FROM` lines (ART rewrites these, but count and order must match `ocp-build-data` image config) |
+| `Dockerfile.ta.art` | Target Allocator image build | Same as above |
+| `bundle/art.yaml` | Downstream CSV and annotation edits | `currentCSV` version, `olm.skipRange` |
+| `bundle/image-references` | Images whose pullspecs ART replaces in the CSV | Usually unchanged |
+| `bundle/opentelemetry-product.package.yaml` | Package name, channel, current CSV | `currentCSV` version |
+| `fips-allowlist.yaml` | Reviewed non-FIPS crypto import chains | Review and update — new dependencies may introduce new chains |
+| `OWNERS` | Downstream repo approvers | Usually unchanged |
+| `renovate.json` | Downstream Renovate preset (security-only updates) | Usually unchanged |
+
+**Downstream-only content** (carry forward, review each release):
+
+| File(s) | Purpose | Action each release |
+|---------|---------|-------------------|
+| `bundle/openshift/manifests/opentelemetry-operator-alerts_*_prometheusrule.yaml` | Downstream-only deprecation/operational alerts | Review: update or remove alerts for components being deprecated or removed in this version |
+| `.gitignore` additions | Ignore patterns for downstream test artifacts (e.g. Playwright) | Carry forward |
+| `tests/e2e-otel/**` | Downstream-only e2e tests | Carry forward |
+| `tests/e2e-otel-ui/**` | Downstream-only UI e2e tests | Carry forward |
+| `tests/e2e-instrumentation/*/scc.yaml` | OpenShift SCCs for instrumentation tests | Carry forward |
+
+**Cherry-picked upstream fixes** (check each release — they may already be in the new tag):
+
+Previous branches may contain cherry-picks of upstream bug fixes that landed after the previous release tag. Before carrying them forward, check whether the fix is already in the new upstream tag:
+
+```bash
+# In the upstream opentelemetry-operator clone
+git merge-base --is-ancestor <cherry-pick-commit> v0.<version>.0 && echo "already included"
+```
+
+If the fix is already in the new tag, do not carry it forward. If it is not, cherry-pick it onto the new branch.
+
+##### Collector (`redhat-opentelemetry-collector`)
+
+The collector repo is not synced by a rebase bot. Upstream collector versions are bumped manually on `main` via `manifest.yaml` and `Makefile`. The workflow is:
+
+1. Bump the collector version on `main` first (update `manifest.yaml`, `Makefile`, rebuild).
+2. Branch `rhosdt-0.<version>` from `main` after the bump commit.
+
+The productization files (`Dockerfile.art`, `fips-allowlist.yaml`, `renovate.json`) are already on `main`. See the collector's `AGENTS.md` for the version bump procedure.
